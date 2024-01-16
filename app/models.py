@@ -12,9 +12,7 @@ class Hero(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String)
     super_name = db.Column(db.String)
-    created_at = db.Column(DateTime, default=datetime.utcnow)
-    updated_at = db.Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-    
+ 
     #relationship 
     superpowers = db.relationship('Power', secondary='hero_powers', backref='superheroe')
     
@@ -29,9 +27,7 @@ class HeroPower(db.Model):
     strength = db.Column(db.String)
     hero_id = db.Column(db.Integer, db.ForeignKey('hero.id'))
     power_id = db.Column(db.Integer, db.ForeignKey('powers.id'))
-    created_at = db.Column(DateTime, default=datetime.utcnow)
-    updated_at = db.Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
- 
+
     hero = db.relationship('Hero', backref=db.backref('hero_powers', cascade='all, delete-orphan'))
     power = db.relationship('Power', backref=db.backref('power_heroes', cascade='all, delete-orphan'))
     
@@ -51,9 +47,7 @@ class Power(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String)
     description = db.Column(db.String)
-    created_at = db.Column(DateTime, default=datetime.utcnow)
-    updated_at = db.Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-    
+
      #relationship 
     superheroes = db.relationship('Hero', secondary='hero_powers', backref='powers')
     
