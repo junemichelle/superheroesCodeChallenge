@@ -6,7 +6,7 @@ body {
 }
 
 header {
-  background-color: #410e03;
+  background-color: #030941;
 }
 
 main {
@@ -19,6 +19,7 @@ header h1 {
   padding: 12px 0;
   text-transform: uppercase;
   letter-spacing: 5px;
+  text-decoration: overline white;
 }
 
 header a {
@@ -52,7 +53,7 @@ li a {
 }
 
 li:nth-of-type(2n) a {
-  color: #fff;
+  color: #d6cbcb;
 }
 
 select,
