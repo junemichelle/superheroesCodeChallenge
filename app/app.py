@@ -1,97 +1,129 @@
-#!/usr/bin/env python3
-from flask import Flask, make_response
+from flask import Flask, jsonify, request, abort
+from flask_sqlalchemy import SQLAlchemy
 from flask_migrate import Migrate
-from flask_restful import Api, Resource, reqparse, abort
 from models import db, Hero, Power, HeroPower
 
 app = Flask(__name__)
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///app.db'
-app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///app.db"
+app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 
-migrate = Migrate(app, db)
 db.init_app(app)
+migrate = Migrate(app, db)
 
-api = Api(app)
-
-# Request parser for PATCH /powers/:id
-power_patch_parser = reqparse.RequestParser()
-power_patch_parser.add_argument('description', type=str, required=True)
-
-class HeroesResource(Resource):
-    def get(self):
-        heroes = Hero.query.all()
-        return [{'id': hero.id, 'name': hero.name, 'super_name': hero.super_name} for hero in heroes]
+@app.route("/")
+def home():
+    return "Welcome to the Superhero API!"
 
 
-class HeroResource(Resource):
-    def get(self, hero_id):
-        hero = Hero.query.get(hero_id)
-        if not hero:
-            abort(404, error="Hero not found")
-        powers = [{'id': power.id, 'name': power.name, 'description': power.description} for power in hero.superpowers]
-        return {'id': hero.id, 'name': hero.name, 'super_name': hero.super_name, 'powers': powers}
+@app.route("/heroes", methods=["GET"])
+def get_heroes():
+    heroes = Hero.query.all()
+    heroes_data = [
+        {"id": hero.id, "name": hero.name, "super_name": hero.super_name}
+        for hero in heroes
+    ]
+    return jsonify(heroes_data)
 
 
-class PowersResource(Resource):
-    def get(self):
-        powers = Power.query.all()
-        return [{'id': power.id, 'name': power.name, 'description': power.description} for power in powers]
+@app.route("/heroes/<int:hero_id>", methods=["GET"])
+def get_hero(hero_id):
+    hero = Hero.query.get(hero_id)
+
+    if hero is None:
+        return jsonify({"error": "Hero not found"}), 404
+
+    hero_data = {
+        "id": hero.id,
+        "name": hero.name,
+        "super_name": hero.super_name,
+        'powers': [{'id': hero_power.power.id, 'name': hero_power.power.name, 'description': hero_power.power.description, 'strength': hero_power.strength} for hero_power in hero.hero_powers]
+    }
+
+    return jsonify(hero_data)
 
 
-class PowerResource(Resource):
-    def get(self, power_id):
-        power = Power.query.get(power_id)
-        if not power:
-            abort(404, error="Power not found")
-        return {'id': power.id, 'name': power.name, 'description': power.description}
-
-    def patch(self, power_id):
-        power = Power.query.get(power_id)
-        if not power:
-            abort(404, error="Power not found")
-
-        args = power_patch_parser.parse_args()
-        power.description = args['description']
-
-        try:
-            db.session.commit()
-            return {'id': power.id, 'name': power.name, 'description': power.description}
-        except Exception as e:
-            db.session.rollback()
-            abort(400, errors=[str(e)])
+@app.route("/powers", methods=["GET"])
+def get_powers():
+    powers = Power.query.all()
+    powers_data = [
+        {"id": power.id, "name": power.name, "description": power.description}
+        for power in powers
+    ]
+    return jsonify(powers_data)
 
 
-class HeroPowersResource(Resource):
-    def post(self):
-        parser = reqparse.RequestParser()
-        parser.add_argument('strength', type=str, required=True)
-        parser.add_argument('power_id', type=int, required=True)
-        parser.add_argument('hero_id', type=int, required=True)
-        args = parser.parse_args()
+@app.route("/powers/<int:power_id>", methods=["GET"])
+def get_power(power_id):
+    power = Power.query.get(power_id)
 
-        power = Power.query.get(args['power_id'])
-        hero = Hero.query.get(args['hero_id'])
+    if power is None:
+        return jsonify({"error": "Power not found"}), 404
 
-        if not power or not hero:
-            abort(404, error="Power or Hero not found")
+    power_data = {"id": power.id, "name": power.name, "description": power.description}
 
-        hero_power = HeroPower(strength=args['strength'], hero=hero, power=power)
+    return jsonify(power_data)
 
-        try:
-            db.session.add(hero_power)
-            db.session.commit()
-            powers = [{'id': p.id, 'name': p.name, 'description': p.description} for p in hero.superpowers]
-            return {'id': hero.id, 'name': hero.name, 'super_name': hero.super_name, 'powers': powers}
-        except Exception as e:
-            db.session.rollback()
-            abort(400, errors=[str(e)])
+VALID_STRENGTH_VALUES = ["Strong", "Weak", "Average"]
 
 
-api.add_resource(HeroesResource, '/heroes')
-api.add_resource(HeroResource, '/heroes/<int:hero_id>')
-api.add_resource(PowersResource, '/powers')
-api.add_resource(PowerResource, '/powers/<int:power_id>')
-api.add_resource(HeroPowersResource, '/hero_powers')
+@app.route("/hero_powers", methods=["POST"])
+def create_hero_power():
+    data = request.json
 
-if __name__ == '__main__':
-    app.run(port=5555)
+    if "strength" not in data or "power_id" not in data or "hero_id" not in data:
+        return jsonify({"errors": ["validation errors"]}), 400
+
+    # Validate strength value
+    if data["strength"] not in VALID_STRENGTH_VALUES:
+        return jsonify({"errors": ["Invalid strength value"]}), 400
+
+    hero = Hero.query.get(data["hero_id"])
+    power = Power.query.get(data["power_id"])
+
+    if hero is None or power is None:
+        return jsonify({"error": "Hero or Power not found"}), 404
+
+    hero_power = HeroPower(hero=hero, power=power, strength=data["strength"])
+
+    try:
+        db.session.add(hero_power)
+        db.session.commit()
+        return get_hero(hero.id)  # Return hero data with updated powers
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"errors": ["validation errors"]}), 400
+
+
+# Validation for Power description
+@app.route("/powers/<int:power_id>", methods=["PATCH"])
+def update_power(power_id):
+    power = Power.query.get(power_id)
+
+    if power is None:
+        return jsonify({"error": "Power not found"}), 404
+
+    data = request.json
+
+    if "description" in data:
+        if len(data["description"]) < 20:
+            return (
+                jsonify(
+                    {"errors": ["Description must be at least 20 characters long"]}
+                ),
+                400,
+            )
+
+        power.description = data["description"]
+
+    try:
+        db.session.commit()
+        return jsonify(
+            {"id": power.id, "name": power.name, "description": power.description}
+        )
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"errors": ["validation errors"]}), 400
+
+
+if __name__ == "__main__":
+    app.run(debug=True, port=5555)
